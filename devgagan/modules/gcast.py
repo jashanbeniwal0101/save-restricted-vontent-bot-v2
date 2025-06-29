@@ -8,15 +8,13 @@ import asyncio
 import time
 import traceback
 from pyrogram import filters
-from pyrogram.errors import (
-    FloodWait, InputUserDeactivated, UserIsBlocked, PeerIdInvalid
-)
+from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked, PeerIdInvalid
 from config import OWNER_ID
 from devgagan import app
 from devgagan.core.mongo.users_db import get_users
 
 
-# Send message (copied) and try to pin it
+# Send copied message and try pinning
 async def send_msg(user_id, message):
     try:
         sent_msg = await message.copy(chat_id=user_id)
@@ -41,32 +39,38 @@ async def send_msg(user_id, message):
         return 500, f"{user_id} : {traceback.format_exc()}\n"
 
 
-# Utility to split list into batches
+# Utility to split list into chunks
 def batched(iterable, size=20):
     it = iter(iterable)
-    while batch := list([*it][:size]):
+    while True:
+        batch = list()
+        try:
+            for _ in range(size):
+                batch.append(next(it))
+        except StopIteration:
+            if batch:
+                yield batch
+            break
         yield batch
 
 
 # /gcast command (copy broadcast)
 @app.on_message(filters.command("gcast") & filters.user(OWNER_ID))
 async def broadcast(_, message):
-    # Determine content to send
-    to_send = message.reply_to_message or (
-        message.text.split(None, 1)[1] if len(message.text.split()) > 1 else None
-    )
+    # Message to send (replied or plain text)
+    if message.reply_to_message:
+        to_send = message.reply_to_message
+    elif len(message.command) > 1:
+        to_send = " ".join(message.command[1:])
+    else:
+        return await message.reply("❌ Reply to a message or give text after `/gcast`.")
 
-    if not to_send:
-        return await message.reply_text("❌ Reply to a message or add text after `/gcast`.")
-
-    # Prepare users
-    exmsg = await message.reply_text("📤 Starting broadcast...")
+    exmsg = await message.reply("📤 Starting broadcast...")
     all_users = list(set(await get_users() or []))  # remove duplicates
-    done_users = 0
-    failed_users = 0
-    start_time = time.time()
+    done = 0
+    failed = 0
+    start = time.time()
 
-    # Broadcast in batches
     for batch in batched(all_users, 20):
         for user in batch:
             try:
@@ -74,35 +78,33 @@ async def broadcast(_, message):
                     await app.send_message(chat_id=int(user), text=to_send)
                 else:
                     _, err = await send_msg(int(user), to_send)
-                done_users += 1
+                done += 1
             except Exception:
-                failed_users += 1
-        await asyncio.sleep(1)  # throttle to prevent FloodWaits
+                failed += 1
+        await asyncio.sleep(1)
 
-    # Final report
-    elapsed = round(time.time() - start_time, 2)
-    await exmsg.edit_text(
+    end = round(time.time() - start, 2)
+    await exmsg.edit(
         f"✅ **Broadcast Completed**\n\n"
         f"👥 Total Users: `{len(all_users)}`\n"
-        f"📤 Delivered: `{done_users}`\n"
-        f"❌ Failed: `{failed_users}`\n"
-        f"⏱ Duration: `{elapsed}s`"
+        f"📤 Delivered: `{done}`\n"
+        f"❌ Failed: `{failed}`\n"
+        f"⏱ Duration: `{end}s`"
     )
 
 
-# /acast command (forward or text broadcast)
+# /acast command (forward broadcast or text)
 @app.on_message(filters.command("acast") & filters.user(OWNER_ID))
 async def announced(_, message):
     users = list(set(await get_users() or []))  # remove duplicates
-    done_users = 0
-    failed_users = 0
-    start_time = time.time()
+    done = 0
+    failed = 0
+    start = time.time()
 
-    # Forward reply
     if message.reply_to_message:
         msg_id = message.reply_to_message.id
         chat_id = message.chat.id
-        exmsg = await message.reply_text("📣 Starting forward broadcast...")
+        exmsg = await message.reply("📣 Starting forward broadcast...")
 
         for batch in batched(users, 20):
             for user in batch:
@@ -112,34 +114,32 @@ async def announced(_, message):
                         from_chat_id=chat_id,
                         message_ids=msg_id
                     )
-                    done_users += 1
+                    done += 1
                 except Exception:
-                    failed_users += 1
+                    failed += 1
             await asyncio.sleep(1)
 
-    # Send as plain text
-    elif len(message.text.split()) > 1:
-        broadcast_text = message.text.split(None, 1)[1]
-        exmsg = await message.reply_text("📤 Starting text broadcast...")
+    elif len(message.command) > 1:
+        text = " ".join(message.command[1:])
+        exmsg = await message.reply("📤 Starting text broadcast...")
 
         for batch in batched(users, 20):
             for user in batch:
                 try:
-                    await app.send_message(chat_id=int(user), text=broadcast_text)
-                    done_users += 1
+                    await app.send_message(chat_id=int(user), text=text)
+                    done += 1
                 except Exception:
-                    failed_users += 1
+                    failed += 1
             await asyncio.sleep(1)
 
     else:
-        return await message.reply_text("❌ Reply to a message or add text after `/acast`.")
+        return await message.reply("❌ Reply to a message or give text after `/acast`.")
 
-    # Final report
-    elapsed = round(time.time() - start_time, 2)
-    await exmsg.edit_text(
+    end = round(time.time() - start, 2)
+    await exmsg.edit(
         f"✅ **Broadcast Completed**\n\n"
         f"👥 Total Users: `{len(users)}`\n"
-        f"📤 Delivered: `{done_users}`\n"
-        f"❌ Failed: `{failed_users}`\n"
-        f"⏱ Duration: `{elapsed}s`"
-    )
+        f"📤 Delivered: `{done}`\n"
+        f"❌ Failed: `{failed}`\n"
+        f"⏱ Duration: `{end}s`"
+                )
