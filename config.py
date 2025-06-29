@@ -81,7 +81,7 @@ gds.google.com	FALSE	/	TRUE	1753025749	OTZ	8135496_34_34__34_
 .mozilla.org	TRUE	/	FALSE	1750433863	_gat	1
 """
 
-API_ID = int(getenv("API_ID", "29194780"))
+API_ID = int(getenv("API_ID", "1955406483"))
 API_HASH = getenv("API_HASH", "e9182befc8cb23455a552e551c7d43e6")
 BOT_TOKEN = getenv("BOT_TOKEN", "7724660683:AAHxB3YvpwhOuR6B-JqEeH4TO-LeZwWHu98")
 OWNER_ID = list(map(int, getenv("OWNER_ID", "1314374942").split()))
