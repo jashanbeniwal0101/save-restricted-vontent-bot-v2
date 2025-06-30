@@ -423,7 +423,7 @@ async def copy_message_with_chat_id(app, userbot, sender, chat_id, message_id, e
     target_chat_id = user_chat_ids.get(sender, sender)
     file = None
     result = None
-    size_limit = 4 * 1024 * 1024 * 1024  # 2 GB size limit
+    size_limit = 2 * 1024 * 1024 * 1024  # 2 GB size limit
 
     try:
         msg = await app.get_messages(chat_id, message_id)
