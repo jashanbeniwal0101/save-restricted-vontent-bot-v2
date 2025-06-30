@@ -75,7 +75,7 @@ async def token_handler(client, message):
     if len(message.command) <= 1:
         image_url = "https://i.ibb.co/jvtb87K4/image.jpg"
         join_button = InlineKeyboardButton("Join Channel", url="https://t.me/+z3NaoCJt7RJiZWQ0")
-        premium = InlineKeyboardButton("Get Premium", url="https://t.me/arsh_beniwal")   
+        premium = InlineKeyboardButton("Get Premium", url="https://t.me/Swl1z")   
         keyboard = InlineKeyboardMarkup([
             [join_button],   
             [premium]    
@@ -85,7 +85,7 @@ async def token_handler(client, message):
             image_url,
             caption=(
                 "Hi 👋 Welcome, Wanna intro...?\n\n"
-                "✳️ I can save posts from channels or groups where forwarding is off. I can download videos/audio from YT, INSTA, ... social platforms\n"
+                "✳️ I can save posts from channels or groups where forwarding is off. I can download videos/audio from YT, INSTA, ... social platforms\n\n"
                 "✳️ Simply send the post link of a public channel. For private channels, do /login. Send /help to know more."
             ),
             reply_markup=keyboard
