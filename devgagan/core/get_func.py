@@ -193,7 +193,7 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
         msg_link = msg_link.split("?single")[0]
         chat, msg_id = None, None
         saved_channel_ids = load_saved_channel_ids()
-        size_limit = 2 * 1024 * 1024 * 1024  # 1.99 GB size limit
+        size_limit = 4 * 1024 * 1024 * 1024  # 1.99 GB size limit
         file = ''
         edit = ''
         # Extract chat and message ID for valid Telegram links
