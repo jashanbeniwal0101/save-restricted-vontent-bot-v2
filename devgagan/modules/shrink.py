@@ -74,7 +74,7 @@ async def token_handler(client, message):
     user_id = message.chat.id
     if len(message.command) <= 1:
         image_url = "https://i.ibb.co/jvtb87K4/image.jpg"
-        join_button = InlineKeyboardButton("Join Channel", url="https://t.me/+z3NaoCJt7RJiZWQ0")
+        join_button = InlineKeyboardButton("Join Channel", url="https://t.me/+RhfH1muy4mc1NWE8")
         premium = InlineKeyboardButton("Get Premium", url="https://t.me/Swl1z")   
         keyboard = InlineKeyboardMarkup([
             [join_button],   
@@ -84,9 +84,9 @@ async def token_handler(client, message):
         await message.reply_photo(
             image_url,
             caption=(
-                "Hi 👋 Welcome, Wanna intro...?\n\n"
-                "✳️ I can save posts from channels or groups where forwarding is off. I can download videos/audio from YT, INSTA, ... social platforms\n\n"
-                "✳️ Simply send the post link of a public channel. For private channels, do /login. Send /help to know more."
+                "مرحبًا 👋 أهلاً بك، هل ترغب في مقدمة؟\n\n"
+"✳️ يمكنني حفظ المنشورات من القنوات أو المجموعات التي تم تعطيل إعادة التوجيه فيها. يمكنني تنزيل الفيديوهات/الصوت من يوتيوب، إنستغرام، ومنصات التواصل الأخرى...\n\n"
+"✳️ فقط أرسل رابط المنشور من قناة عامة. بالنسبة للقنوات الخاصة، استخدم الأمر /login. أرسل /help لمعرفة المزيد."
             ),
             reply_markup=keyboard
         )
