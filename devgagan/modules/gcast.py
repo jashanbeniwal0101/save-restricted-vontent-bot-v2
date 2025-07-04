@@ -57,14 +57,10 @@ def batched(iterable, size=20):
 # /gcast command (copy broadcast)
 @app.on_message(filters.command("gcast") & filters.user(OWNER_ID))
 async def broadcast(_, message):
-    # Message to send (replied or plain text)
-    if message.reply_to_message:
-        to_send = message.reply_to_message
-    elif len(message.command) > 1:
-        to_send = " ".join(message.command[1:])
-    else:
-        return await message.reply("❌ Reply to a message or give text after `/gcast`.")
+    if not message.reply_to_message:
+        return await message.reply("❌ Please reply to a message you want to broadcast.")
 
+    to_send = message.reply_to_message
     exmsg = await message.reply("📤 Starting broadcast...")
     all_users = list(set(await get_users() or []))  # remove duplicates
     done = 0
@@ -74,10 +70,7 @@ async def broadcast(_, message):
     for batch in batched(all_users, 20):
         for user in batch:
             try:
-                if isinstance(to_send, str):
-                    await app.send_message(chat_id=int(user), text=to_send)
-                else:
-                    _, err = await send_msg(int(user), to_send)
+                _, err = await send_msg(int(user), to_send)
                 done += 1
             except Exception:
                 failed += 1
