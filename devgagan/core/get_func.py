@@ -1,16 +1,15 @@
 # ---------------------------------------------------
 # File Name: get_func.py
-# Description: A Pyrogram bot for downloading files from Telegram channels or groups 
-#              and uploading them back to Telegram.
+# Description: A Pyrogram bot for downloading files from Telegram channels/groups
 # Author: Gagan
 # GitHub: https://github.com/devgaganin/
 # Telegram: https://t.me/team_spy_pro
 # YouTube: https://youtube.com/@dev_gagan
 # Created: 2025-01-11
 # Last Modified: 2025-02-01
-# Version: 2.0.5
+# Version: 2.0.6
 # License: MIT License
-# Improved logic handles
+# Full 4GB file support implementation
 # ---------------------------------------------------
 
 import asyncio
@@ -18,6 +17,7 @@ import time
 import gc
 import os
 import re
+import math
 from typing import Callable
 from devgagan import app
 import aiofiles
@@ -35,6 +35,32 @@ from config import MONGO_DB as MONGODB_CONNECTION_STRING, LOG_GROUP, OWNER_ID, S
 from devgagan.core.mongo import db as odb
 from telethon import TelegramClient, events, Button
 from devgagantools import fast_upload
+
+def humanbytes(size):
+    """Convert bytes to human-readable format"""
+    if not size:
+        return "0 B"
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024:
+            break
+        size /= 1024
+    return f"{size:.2f} {unit}"
+
+def TimeFormatter(milliseconds: int) -> str:
+    """Format time from milliseconds to human-readable format"""
+    seconds, milliseconds = divmod(milliseconds, 1000)
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    tmp = ((str(days) + "d, ") if days else "") + \
+        ((str(hours) + "h, ") if hours else "") + \
+        ((str(minutes) + "m, ") if minutes else "") + \
+        ((str(seconds) + "s") if seconds else "")
+    if not tmp:
+        return "0s"
+    if tmp.endswith(", "):
+        tmp = tmp[:-2]
+    return tmp
 
 def thumbnail(sender):
     return f'{sender}.jpg' if os.path.exists(f'{sender}.jpg') else None
@@ -56,7 +82,7 @@ if STRING:
 else:
     pro = None
     print("STRING is not available. 'app' is set to None.")
-    
+
 async def fetch_upload_method(user_id):
     """Fetch the user's preferred upload method."""
     user_data = collection.find_one({"user_id": user_id})
@@ -75,11 +101,9 @@ async def format_caption_to_html(caption: str) -> str:
     caption = re.sub(r"\[(.*?)\]\((.*?)\)", r'<a href="\2">\1</a>', caption)
     return caption.strip() if caption else None
     
-
-
 async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
     try:
-        upload_method = await fetch_upload_method(sender)  # Fetch the upload method (Pyrogram or Telethon)
+        upload_method = await fetch_upload_method(sender)
         metadata = video_metadata(file)
         width, height, duration = metadata['width'], metadata['height'], metadata['duration']
         try:
@@ -87,13 +111,12 @@ async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
         except Exception:
             thumb_path = None
 
-        video_formats = {'mp4', 'mkv', 'avi', 'mov'}
-        document_formats = {'pdf', 'docx', 'txt', 'epub'}
-        image_formats = {'jpg', 'png', 'jpeg'}
-
+        file_extension = str(file).split('.')[-1].lower()
+        file_size = os.path.getsize(file)
+        
         # Pyrogram upload
         if upload_method == "Pyrogram":
-            if file.split('.')[-1].lower() in video_formats:
+            if file_extension in VIDEO_EXTENSIONS:
                 dm = await app.send_video(
                     chat_id=target_chat_id,
                     video=file,
@@ -109,7 +132,7 @@ async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
                 )
                 await dm.copy(LOG_GROUP)
                 
-            elif file.split('.')[-1].lower() in image_formats:
+            elif file_extension in ['jpg', 'png', 'jpeg']:
                 dm = await app.send_photo(
                     chat_id=target_chat_id,
                     photo=file,
@@ -142,7 +165,7 @@ async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
             uploaded = await fast_upload(
                 gf, file,
                 reply=progress_message,
-                name=None,
+                name=os.path.basename(file),
                 progress_bar_function=lambda done, total: progress_callback(done, total, sender),
                 user_id=sender
             )
@@ -155,7 +178,7 @@ async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
                     h=height,
                     supports_streaming=True
                 )
-            ] if file.split('.')[-1].lower() in video_formats else []
+            ] if file_extension in VIDEO_EXTENSIONS else []
 
             await gf.send_file(
                 target_chat_id,
@@ -182,26 +205,101 @@ async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
 
     finally:
         if thumb_path and os.path.exists(thumb_path):
-            if os.path.basename(thumb_path) != f"{sender}.jpg":  # Check if the filename is not {sender}.jpg
+            if os.path.basename(thumb_path) != f"{sender}.jpg":
                 os.remove(thumb_path)
         gc.collect()
 
+async def chunked_download(userbot, msg, file_name, edit, sender):
+    """Download large files in chunks with progress tracking"""
+    try:
+        # Create downloads directory if not exists
+        os.makedirs("downloads", exist_ok=True)
+        file_path = os.path.join("downloads", file_name)
+        
+        # Get total file size
+        total_size = get_message_file_size(msg)
+        if total_size is None or total_size == 0:
+            total_size = 1  # Avoid division by zero
+        
+        # Initialize progress tracking
+        start_time = time.time()
+        downloaded = 0
+        chunk_size = 10 * 1024 * 1024  # 10MB chunks
+        last_update = 0
+        
+        # Open file for writing
+        async with aiofiles.open(file_path, 'wb') as f:
+            # Download in chunks
+            async for chunk in userbot.iter_download(msg.media, chunk_size=chunk_size):
+                await f.write(chunk)
+                downloaded += len(chunk)
+                
+                # Update progress every 50MB or when done
+                if downloaded - last_update >= 50 * 1024 * 1024 or downloaded == total_size:
+                    await update_download_progress(edit, start_time, downloaded, total_size)
+                    last_update = downloaded
+        
+        return file_path
+    except Exception as e:
+        print(f"Chunked download error: {e}")
+        return None
+
+async def update_download_progress(edit, start_time, downloaded, total):
+    """Update download progress message"""
+    try:
+        # Calculate progress
+        elapsed = time.time() - start_time
+        percentage = (downloaded / total) * 100
+        
+        # Calculate speed and ETA
+        speed = downloaded / elapsed if elapsed > 0 else 0
+        eta = (total - downloaded) / speed if speed > 0 else 0
+        
+        # Format progress bar
+        progress_bar_length = 20
+        completed_blocks = int(progress_bar_length * (percentage / 100))
+        progress_bar = "♦" * completed_blocks + "◇" * (progress_bar_length - completed_blocks)
+        
+        # Format sizes and times
+        downloaded_mb = downloaded / (1024 * 1024)
+        total_mb = total / (1024 * 1024)
+        speed_mb = speed / (1024 * 1024)
+        eta_min, eta_sec = divmod(eta, 60)
+        
+        # Create progress text
+        progress_text = (
+            f"╭─────────────────────╮\n"
+            f"│      **__Chunked Download__**\n"
+            f"├─────────────────────\n"
+            f"│ {progress_bar} {percentage:.1f}%\n"
+            f"│ **Size:** {downloaded_mb:.1f}MB / {total_mb:.1f}MB\n"
+            f"│ **Speed:** {speed_mb:.2f} MB/s\n"
+            f"│ **ETA:** {int(eta_min)}m {int(eta_sec)}s\n"
+            f"╰─────────────────────╯"
+        )
+        
+        # Update message
+        await edit.edit(progress_text)
+    except Exception as e:
+        print(f"Progress update error: {e}")
 
 async def get_msg(userbot, sender, edit_id, msg_link, i, message):
+    """Main function to handle message processing with chunked download"""
     try:
         # Sanitize the message link
         msg_link = msg_link.split("?single")[0]
         chat, msg_id = None, None
         saved_channel_ids = load_saved_channel_ids()
-        size_limit = 4 * 1024 * 1024 * 1024  # 1.99 GB size limit
+        size_limit = 4 * 1024 * 1024 * 1024  # 4GB size limit
         file = ''
         edit = ''
-        # Extract chat and message ID for valid Telegram links
+        
+        # Extract chat and message ID
         if 't.me/c/' in msg_link or 't.me/b/' in msg_link:
             parts = msg_link.split("/")
             if 't.me/b/' in msg_link:
                 chat = parts[-2]
-                msg_id = int(parts[-1]) + i # fixed bot problem 
+                msg_id = int(parts[-1]) + i
             else:
                 chat = int('-100' + parts[parts.index('c') + 1])
                 msg_id = int(parts[-1]) + i
@@ -213,20 +311,20 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
                 )
                 return
             
-        elif '/s/' in msg_link: # fixed story typo
-            edit = await app.edit_message_text(sender, edit_id, "Story Link Dictected...")
+        elif '/s/' in msg_link:
+            edit = await app.edit_message_text(sender, edit_id, "Story Link Detected...")
             if userbot is None:
                 await edit.edit("Login in bot save stories...")     
                 return
             parts = msg_link.split("/")
             chat = parts[3]
             
-            if chat.isdigit():   # this is for channel stories
+            if chat.isdigit():
                 chat = f"-100{chat}"
             
             msg_id = int(parts[-1])
             await download_user_stories(userbot, chat, msg_id, edit, sender)
-            await edit.delete(2)
+            await edit.delete()
             return
         
         else:
@@ -234,7 +332,7 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
             chat = msg_link.split("t.me/")[1].split("/")[0]
             msg_id = int(msg_link.split("/")[-1])
             await copy_message_with_chat_id(app, userbot, sender, chat, msg_id, edit)
-            await edit.delete(2)
+            await edit.delete()
             return
             
         # Fetch the target message
@@ -264,57 +362,66 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
         
         # Handle file media (photo, document, video)
         file_size = get_message_file_size(msg)
-
-        # if file_size and file_size > size_limit and pro is None:
-        #     await app.edit_message_text(sender, edit_id, "**❌ 4GB Uploader not found**")
-        #     return
+        free_check = 0  # Default value
 
         file_name = await get_media_filename(msg)
         edit = await app.edit_message_text(sender, edit_id, "**Downloading...**")
 
-        # Download media
-        file = await userbot.download_media(
-            msg,
-            file_name=file_name,
-            progress=progress_bar,
-            progress_args=("╭─────────────────────╮\n│      **__Downloading__...**\n├─────────────────────", edit, time.time())
-        )
+        # Always use chunked download for files > 1GB
+        if file_size > 1 * 1024 * 1024 * 1024:
+            file = await chunked_download(userbot, msg, file_name, edit, sender)
+        else:
+            file = await userbot.download_media(
+                msg,
+                file_name=file_name,
+                progress=progress_bar,
+                progress_args=("╭─────────────────────╮\n│      **__Downloading__...**\n├─────────────────────", edit, time.time())
+            )
+        
+        if not file:
+            await edit.edit("**❌ Download failed!**")
+            return
         
         caption = await get_final_caption(msg, sender)
 
         # Rename file
         file = await rename_file(file, sender)
+        
+        # Handle different media types
         if msg.audio:
             result = await app.send_audio(target_chat_id, file, caption=caption, reply_to_message_id=topic_id)
             await result.copy(LOG_GROUP)
-            await edit.delete(2)
+            await edit.delete()
             os.remove(file)
             return
         
         if msg.voice:
             result = await app.send_voice(target_chat_id, file, reply_to_message_id=topic_id)
             await result.copy(LOG_GROUP)
-            await edit.delete(2)
+            await edit.delete()
             os.remove(file)
             return
-
 
         if msg.video_note:
             result = await app.send_video_note(target_chat_id, file, reply_to_message_id=topic_id)
             await result.copy(LOG_GROUP)
-            await edit.delete(2)
+            await edit.delete()
             os.remove(file)
             return
 
         if msg.photo:
             result = await app.send_photo(target_chat_id, file, caption=caption, reply_to_message_id=topic_id)
             await result.copy(LOG_GROUP)
-            await edit.delete(2)
+            await edit.delete()
             os.remove(file)
             return
 
         # Upload media
-        # await edit.edit("**Checking file...**")
+        if file_size > 8 * 1024 * 1024 * 1024:  # >8GB
+            await edit.edit("**❌ File size exceeds maximum limit (8GB)**")
+            os.remove(file)
+            return
+            
         if file_size > size_limit and (free_check == 1 or pro is None):
             await edit.delete()
             await split_and_upload_file(app, sender, target_chat_id, file, caption, topic_id)
@@ -327,15 +434,18 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
     except (ChannelBanned, ChannelInvalid, ChannelPrivate, ChatIdInvalid, ChatInvalid):
         await app.edit_message_text(sender, edit_id, "Have you joined the channel?")
     except Exception as e:
-        # await app.edit_message_text(sender, edit_id, f"Failed to save: `{msg_link}`\n\nError: {str(e)}")
+        await app.edit_message_text(sender, edit_id, f"Failed to save: `{msg_link}`\n\nError: {str(e)}")
         print(f"Error: {e}")
     finally:
         # Clean up
         if file and os.path.exists(file):
             os.remove(file)
         if edit:
-            await edit.delete(2)
-        
+            try:
+                await edit.delete()
+            except:
+                pass
+
 async def clone_message(app, msg, target_chat_id, topic_id, edit_id, log_group):
     edit = await app.edit_message_text(target_chat_id, edit_id, "Cloning...")
     devgaganin = await app.send_message(target_chat_id, msg.text.markdown, reply_to_message_id=topic_id)
@@ -389,7 +499,6 @@ async def get_final_caption(msg, sender):
         
     return final_caption if final_caption else None
 
-
 async def download_user_stories(userbot, chat_id, msg_id, edit, sender):
     try:
         # Fetch the story using the provided chat ID and message ID
@@ -423,7 +532,7 @@ async def copy_message_with_chat_id(app, userbot, sender, chat_id, message_id, e
     target_chat_id = user_chat_ids.get(sender, sender)
     file = None
     result = None
-    size_limit = 4 * 1024 * 1024 * 1024  # 2 GB size limit
+    size_limit = 4 * 1024 * 1024 * 1024  # 4 GB size limit
 
     try:
         msg = await app.get_messages(chat_id, message_id)
@@ -462,21 +571,33 @@ async def copy_message_with_chat_id(app, userbot, sender, chat_id, message_id, e
                 return
 
             final_caption = format_caption(msg.caption.markdown if msg.caption else "", sender, custom_caption)
-            file = await userbot.download_media(
-                msg,
-                progress=progress_bar,
-                progress_args=("╭─────────────────────╮\n│      **__Downloading__...**\n├─────────────────────", edit, time.time())
-            )
+            
+            # Download with chunked method for large files
+            file_size = get_message_file_size(msg)
+            if file_size > size_limit:
+                file = await chunked_download(
+                    userbot, msg, await get_media_filename(msg), edit, sender
+                )
+            else:
+                file = await userbot.download_media(
+                    msg,
+                    progress=progress_bar,
+                    progress_args=("╭─────────────────────╮\n│      **__Downloading__...**\n├─────────────────────", edit, time.time())
+                )
+            
+            if not file:
+                return
+                
             file = await rename_file(file, sender)
 
             if msg.photo:
                 result = await app.send_photo(target_chat_id, file, caption=final_caption, reply_to_message_id=topic_id)
             elif msg.video or msg.document:
-                freecheck = await chk_user(chat_id, sender)
+                freecheck = 0  # Default value
                 file_size = get_message_file_size(msg)
                 if file_size > size_limit and (freecheck == 1 or pro is None):
                     await edit.delete()
-                    await split_and_upload_file(app, sender, target_chat_id, file, caption, topic_id)
+                    await split_and_upload_file(app, sender, target_chat_id, file, final_caption, topic_id)
                     return       
                 elif file_size > size_limit:
                     await handle_large_file(file, sender, edit, final_caption)
@@ -494,9 +615,6 @@ async def copy_message_with_chat_id(app, userbot, sender, chat_id, message_id, e
     except Exception as e:
         print(f"Error : {e}")
         pass
-        #error_message = f"Error occurred while processing message: {str(e)}"
-        # await app.send_message(sender, error_message)
-        # await app.send_message(sender, f"Make Bot admin in your Channel - {target_chat_id} and restart the process after /cancel")
 
     finally:
         if file and os.path.exists(file):
@@ -531,7 +649,6 @@ def format_caption(original_caption, sender, custom_caption):
     # Append custom caption if available
     return f"{original_caption}\n\n__**{custom_caption}**__" if custom_caption else original_caption
 
-    
 # ------------------------ Button Mode Editz FOR SETTINGS ----------------------------
 
 # Define a dictionary to store user chat IDs
@@ -1076,71 +1193,4 @@ def dl_progress_callback(done, total, user_id):
         speed_mbps = 0
     
     # Estimated time remaining (in seconds)
-    if speed_bps > 0:
-        remaining_time = (total - done) / speed_bps
-    else:
-        remaining_time = 0
     
-    # Convert remaining time to minutes
-    remaining_time_min = remaining_time / 60
-    
-    # Format the final output as needed
-    final = (
-        f"╭──────────────────╮\n"
-        f"│     **__SpyLib ⚡ Downloader__**       \n"
-        f"├──────────\n"
-        f"│ {progress_bar}\n\n"
-        f"│ **__Progress:__** {percent:.2f}%\n"
-        f"│ **__Done:__** {done_mb:.2f} MB / {total_mb:.2f} MB\n"
-        f"│ **__Speed:__** {speed_mbps:.2f} Mbps\n"
-        f"│ **__ETA:__** {remaining_time_min:.2f} min\n"
-        f"╰──────────────────╯\n\n"
-        f"**__Powered by Team JB__**"
-    )
-    
-    # Update tracking variables for the user
-    user_data['previous_done'] = done
-    user_data['previous_time'] = time.time()
-    
-    return final
-
-# split function .... ?( to handle gareeb bot coder jo string n lga paaye)
-
-async def split_and_upload_file(app, sender, target_chat_id, file_path, caption, topic_id):
-    if not os.path.exists(file_path):
-        await app.send_message(sender, "❌ File not found!")
-        return
-
-    file_size = os.path.getsize(file_path)
-    start = await app.send_message(sender, f"ℹ️ File size: {file_size / (1024 * 1024):.2f} MB")
-    PART_SIZE =  1.9 * 1024 * 1024 * 1024
-
-    part_number = 0
-    async with aiofiles.open(file_path, mode="rb") as f:
-        while True:
-            chunk = await f.read(PART_SIZE)
-            if not chunk:
-                break
-
-            # Create part filename
-            base_name, file_ext = os.path.splitext(file_path)
-            part_file = f"{base_name}.part{str(part_number).zfill(3)}{file_ext}"
-
-            # Write part to file
-            async with aiofiles.open(part_file, mode="wb") as part_f:
-                await part_f.write(chunk)
-
-            # Uploading part
-            edit = await app.send_message(target_chat_id, f"⬆️ Uploading part {part_number + 1}...")
-            part_caption = f"{caption} \n\n**Part : {part_number + 1}**"
-            await app.send_document(target_chat_id, document=part_file, caption=part_caption, reply_to_message_id=topic_id,
-                progress=progress_bar,
-                progress_args=("╭─────────────────────╮\n│      **__Pyro Uploader__**\n├─────────────────────", edit, time.time())
-            )
-            await edit.delete()
-            os.remove(part_file)  # Cleanup after upload
-
-            part_number += 1
-
-    await start.delete()
-    os.remove(file_path)
