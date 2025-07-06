@@ -1,3 +1,5 @@
+# __main__.py
+
 # ---------------------------------------------------
 # File Name: __main__.py
 # Description: A Pyrogram bot for downloading files from Telegram channels or groups 
@@ -16,25 +18,34 @@ import asyncio
 import importlib
 import gc
 from pyrogram import idle
-from devgagan.modules import ALL_MODULES
-from devgagan.core.mongo.plans_db import check_and_remove_expired_users
 from aiojobs import create_scheduler
 
-# ----------------------------Bot-Start---------------------------- #
+from devgagan.modules import ALL_MODULES
+from devgagan.core.mongo.plans_db import check_and_remove_expired_users
 
-loop = asyncio.get_event_loop()
+# 🔁 Auto import module loader
+async def load_all_modules():
+    for all_module in ALL_MODULES:
+        importlib.import_module("devgagan.modules." + all_module)
 
-# Function to schedule expiry checks
+# 🔁 Background job for expired premium removals
 async def schedule_expiry_check():
     scheduler = await create_scheduler()
     while True:
         await scheduler.spawn(check_and_remove_expired_users())
-        await asyncio.sleep(60)  # Check every hour
+        await asyncio.sleep(3600)  # Run every hour
         gc.collect()
 
+# 🔁 Full Bot Boot (including session clients and idle mode)
 async def devggn_boot():
-    for all_module in ALL_MODULES:
-        importlib.import_module("devgagan.modules." + all_module)
+    from __init__ import start_all_clients  # 💡 Import from your initializer
+
+    # Start all bot & user clients
+    await start_all_clients()
+
+    # Load all features/modules
+    await load_all_modules()
+
     print("""
 ---------------------------------------------------
 📂 Bot Deployed successfully ...
@@ -52,12 +63,11 @@ async def devggn_boot():
 """)
 
     asyncio.create_task(schedule_expiry_check())
-    print("Auto removal started ...")
+    print("🛡️ Auto premium expiry cleanup started...")
     await idle()
-    print("Bot stopped...")
+    print("⛔ Bot stopped.")
 
-
+# Start the main loop
 if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
     loop.run_until_complete(devggn_boot())
-
-# ------------------------------------------------------------------ #
