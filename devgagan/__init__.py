@@ -1,4 +1,3 @@
-# __init__.py
 # ---------------------------------------------------
 # File Name: __init__.py
 # Description: A Pyrogram bot for downloading files from Telegram channels or groups 
