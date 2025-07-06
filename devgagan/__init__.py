@@ -1,30 +1,37 @@
 # __init__.py
+# ---------------------------------------------------
+# File Name: __init__.py
+# Description: A Pyrogram bot for downloading files from Telegram channels or groups 
+#              and uploading them back to Telegram.
+# Author: Gagan
+# GitHub: https://github.com/devgaganin/
+# Telegram: https://t.me/team_spy_pro
+# YouTube: https://youtube.com/@dev_gagan
+# Created: 2025-01-11
+# Last Modified: 2025-01-11
+# Version: 2.0.5
+# License: MIT License
+# ---------------------------------------------------
 
 import asyncio
 import logging
 import time
-
 from pyrogram import Client
-from pyrogram.enums import ParseMode
+from pyrogram.enums import ParseMode 
+from config import API_ID, API_HASH, BOT_TOKEN, STRING, MONGO_DB, DEFAULT_SESSION
 from telethon.sync import TelegramClient
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from config import (
-    API_ID, API_HASH, BOT_TOKEN,
-    STRING, DEFAULT_SESSION,
-    MONGO_DB
-)
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
-# ✅ Logging Setup
 logging.basicConfig(
     format="[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s",
     level=logging.INFO,
 )
 
-# ⏱️ Bot Start Time
 botStartTime = time.time()
 
-# ✅ Pyrogram Bot Client
 app = Client(
     "pyrobot",
     api_id=API_ID,
@@ -34,73 +41,47 @@ app = Client(
     parse_mode=ParseMode.MARKDOWN
 )
 
-# ✅ Pyrogram Userbot (Session String)
-pro = Client(
-    "ggbot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    session_string=STRING
-) if STRING else None
+sex = TelegramClient('sexrepo', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# ✅ Pyrogram Optional Userbot (Default Session)
-userrbot = Client(
-    "userrbot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    session_string=DEFAULT_SESSION
-) if DEFAULT_SESSION else None
+if STRING:
+    pro = Client("ggbot", api_id=API_ID, api_hash=API_HASH, session_string=STRING)
+else:
+    pro = None
 
-# ✅ Telethon Client
-telethon_client = TelegramClient(
-    "telethon_session",
-    API_ID,
-    API_HASH
-).start(bot_token=BOT_TOKEN)
 
-# ✅ MongoDB Setup
-mongo_client = AsyncIOMotorClient(MONGO_DB)
-tdb = mongo_client["telegram_bot"]
-token_collection = tdb["tokens"]
+if DEFAULT_SESSION:
+    userrbot = Client("userrbot", api_id=API_ID, api_hash=API_HASH, session_string=DEFAULT_SESSION)
+else:
+    userrbot = None
 
-# ✅ TTL Index Setup for MongoDB
+telethon_client = TelegramClient('telethon_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+
+# MongoDB setup
+tclient = AsyncIOMotorClient(MONGO_DB)
+tdb = tclient["telegram_bot"]  # Your database
+token = tdb["tokens"]  # Your tokens collection
+
 async def create_ttl_index():
-    try:
-        await token_collection.create_index("expires_at", expireAfterSeconds=0)
-        logging.info("MongoDB TTL index ensured.")
-    except Exception as e:
-        logging.error(f"Failed to create TTL index: {e}")
+    """Ensure the TTL index exists for the `tokens` collection."""
+    await token.create_index("expires_at", expireAfterSeconds=0)
 
-# ✅ Start All Clients
-async def start_all_clients():
+# Run the TTL index creation when the bot starts
+async def setup_database():
     await create_ttl_index()
+    print("MongoDB TTL index created.")
 
-    # Start Bot Client
+async def restrict_bot():
+    global BOT_ID, BOT_NAME, BOT_USERNAME
+    await setup_database()
     await app.start()
-    me = await app.get_me()
-    global BOT_ID, BOT_USERNAME, BOT_NAME
-    BOT_ID = me.id
-    BOT_USERNAME = me.username
-    BOT_NAME = f"{me.first_name} {me.last_name}" if me.last_name else me.first_name
-    logging.info(f"Bot started as @{BOT_USERNAME}")
-
-    # Start STRING userbot
+    getme = await app.get_me()
+    BOT_ID = getme.id
+    BOT_USERNAME = getme.username
+    BOT_NAME = f"{getme.first_name} {getme.last_name}" if getme.last_name else getme.first_name
+    
     if pro:
-        try:
-            await pro.start()
-            logging.info("Userbot (STRING) started.")
-        except Exception as e:
-            logging.warning(f"Failed to start userbot (STRING): {e}")
-
-    # Start DEFAULT_SESSION userbot
+        await pro.start()
     if userrbot:
-        try:
-            await userrbot.start()
-            logging.info("Userbot (DEFAULT_SESSION) started.")
-        except Exception as e:
-            logging.warning(f"Failed to start userbot (DEFAULT_SESSION): {e}")
+        await userrbot.start()
 
-# ✅ Run Event Loop
-if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(start_all_clients())
+loop.run_until_complete(restrict_bot())
