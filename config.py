@@ -83,7 +83,7 @@ gds.google.com	FALSE	/	TRUE	1753025749	OTZ	8135496_34_34__34_
 
 API_ID = int(getenv("API_ID", "29194780"))
 API_HASH = getenv("API_HASH", "e9182befc8cb23455a552e551c7d43e6")
-BOT_TOKEN = getenv("BOT_TOKEN", "")
+BOT_TOKEN = getenv("BOT_TOKEN", "7724660683:AAHxB3YvpwhOuR6B-JqEeH4TO-LeZwWHu98")
 OWNER_ID = list(map(int, getenv("OWNER_ID", "1314374942").split()))
 MONGO_DB = getenv("MONGO_DB", "mongodb+srv://rs92573993688:pVf4EeDuRi2o92ex@cluster0.9u29q.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 LOG_GROUP = getenv("LOG_GROUP", "-4856275532")
