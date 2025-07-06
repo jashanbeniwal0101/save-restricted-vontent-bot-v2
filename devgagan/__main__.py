@@ -1,9 +1,6 @@
-# __main__.py
-
 # ---------------------------------------------------
 # File Name: __main__.py
-# Description: A Pyrogram bot for downloading files from Telegram channels or groups 
-#              and uploading them back to Telegram.
+# Description: Main entry point for the Telegram bot
 # Author: Gagan
 # GitHub: https://github.com/devgaganin/
 # Telegram: https://t.me/team_spy_pro
@@ -38,7 +35,8 @@ async def schedule_expiry_check():
 
 # 🔁 Full Bot Boot (including session clients and idle mode)
 async def devggn_boot():
-    from __init__ import start_all_clients  # 💡 Import from your initializer
+    # FIXED: Import from devgagan package instead of __init__
+    from devgagan import start_all_clients
 
     # Start all bot & user clients
     await start_all_clients()
@@ -67,7 +65,7 @@ async def devggn_boot():
     await idle()
     print("⛔ Bot stopped.")
 
-# Start the main loop
+# Start the main loop using modern asyncio API
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(devggn_boot())
+    # FIXED: Use modern asyncio.run() instead of deprecated loop methods
+    asyncio.run(devggn_boot())
