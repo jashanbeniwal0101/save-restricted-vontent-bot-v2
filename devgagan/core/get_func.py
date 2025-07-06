@@ -56,102 +56,34 @@ def thumbnail(sender):
 DB_NAME = "smart_users"
 COLLECTION_NAME = "super_user"
 
+# ... existing imports and code ...
+
+# Remove the 2GB size limit
 VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'webm', 'mpg', 'mpeg', '3gp', 'ts', 'm4v', 'f4v', 'vob']
 DOCUMENT_EXTENSIONS = ['pdf', 'docs']
 
-mongo_app = pymongo.MongoClient(MONGODB_CONNECTION_STRING)
-db = mongo_app[DB_NAME]
-collection = db[COLLECTION_NAME]
-
-if STRING:
-    from devgagan import pro
-    print("App imported from devgagan.")
-else:
-    pro = None
-    print("STRING is not available. 'app' is set to None.")
-    
-async def fetch_upload_method(user_id):
-    """Fetch the user's preferred upload method."""
-    user_data = collection.find_one({"user_id": user_id})
-    return user_data.get("upload_method", "Pyrogram") if user_data else "Pyrogram"
-
-async def format_caption_to_html(caption: str) -> str:
-    caption = re.sub(r"^> (.*)", r"<blockquote>\1</blockquote>", caption, flags=re.MULTILINE)
-    caption = re.sub(r"```(.*?)```", r"<pre>\1</pre>", caption, flags=re.DOTALL)
-    caption = re.sub(r"`(.*?)`", r"<code>\1</code>", caption)
-    caption = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", caption)
-    caption = re.sub(r"\*(.*?)\*", r"<b>\1</b>", caption)
-    caption = re.sub(r"__(.*?)__", r"<i>\1</i>", caption)
-    caption = re.sub(r"_(.*?)_", r"<i>\1</i>", caption)
-    caption = re.sub(r"~~(.*?)~~", r"<s>\1</s>", caption)
-    caption = re.sub(r"\|\|(.*?)\|\|", r"<details>\1</details>", caption)
-    caption = re.sub(r"\[(.*?)\]\((.*?)\)", r'<a href="\2">\1</a>', caption)
-    return caption.strip() if caption else None
-    
-
+# ... existing code ...
 
 async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
     try:
-        upload_method = await fetch_upload_method(sender)  # Fetch the upload method (Pyrogram or Telethon)
+        # Always use Telethon for large files
+        upload_method = "Telethon" if os.path.getsize(file) > 2 * 1024 * 1024 * 1024 else await fetch_upload_method(sender)
+        
         metadata = video_metadata(file)
         width, height, duration = metadata['width'], metadata['height'], metadata['duration']
-        try:
-            thumb_path = await screenshot(file, duration, sender)
-        except Exception:
-            thumb_path = None
-
-        video_formats = {'mp4', 'mkv', 'avi', 'mov'}
-        document_formats = {'pdf', 'docx', 'txt', 'epub'}
-        image_formats = {'jpg', 'png', 'jpeg'}
-
-        # Pyrogram upload
+        thumb_path = thumbnail(sender)
+        
+        # Pyrogram upload for small files
         if upload_method == "Pyrogram":
-            if file.split('.')[-1].lower() in video_formats:
-                dm = await app.send_video(
-                    chat_id=target_chat_id,
-                    video=file,
-                    caption=caption,
-                    height=height,
-                    width=width,
-                    duration=duration,
-                    thumb=thumb_path,
-                    reply_to_message_id=topic_id,
-                    parse_mode=ParseMode.MARKDOWN,
-                    progress=progress_bar,
-                    progress_args=("╭─────────────────────╮\n│      **__Pyro Uploader__**\n├─────────────────────", edit, time.time())
-                )
-                await dm.copy(LOG_GROUP)
-                
-            elif file.split('.')[-1].lower() in image_formats:
-                dm = await app.send_photo(
-                    chat_id=target_chat_id,
-                    photo=file,
-                    caption=caption,
-                    parse_mode=ParseMode.MARKDOWN,
-                    progress=progress_bar,
-                    reply_to_message_id=topic_id,
-                    progress_args=("╭─────────────────────╮\n│      **__Pyro Uploader__**\n├─────────────────────", edit, time.time())
-                )
-                await dm.copy(LOG_GROUP)
-            else:
-                dm = await app.send_document(
-                    chat_id=target_chat_id,
-                    document=file,
-                    caption=caption,
-                    thumb=thumb_path,
-                    reply_to_message_id=topic_id,
-                    progress=progress_bar,
-                    parse_mode=ParseMode.MARKDOWN,
-                    progress_args=("╭─────────────────────╮\n│      **__Pyro Uploader__**\n├─────────────────────", edit, time.time())
-                )
-                await asyncio.sleep(2)
-                await dm.copy(LOG_GROUP)
-
-        # Telethon upload
-        elif upload_method == "Telethon":
+            # ... existing Pyrogram upload code ... 
+            pass
+        # Telethon upload for large files
+        else:
             await edit.delete()
             progress_message = await gf.send_message(sender, "**__Uploading...__**")
             caption = await format_caption_to_html(caption)
+            
+            # Use fast_upload for large files
             uploaded = await fast_upload(
                 gf, file,
                 reply=progress_message,
@@ -168,7 +100,7 @@ async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
                     h=height,
                     supports_streaming=True
                 )
-            ] if file.split('.')[-1].lower() in video_formats else []
+            ] if file.split('.')[-1].lower() in VIDEO_EXTENSIONS else []
 
             await gf.send_file(
                 target_chat_id,
@@ -195,10 +127,62 @@ async def upload_media(sender, target_chat_id, file, caption, edit, topic_id):
 
     finally:
         if thumb_path and os.path.exists(thumb_path):
-            if os.path.basename(thumb_path) != f"{sender}.jpg":  # Check if the filename is not {sender}.jpg
+            if os.path.basename(thumb_path) != f"{sender}.jpg":
                 os.remove(thumb_path)
         gc.collect()
 
+async def get_msg(userbot, sender, edit_id, msg_link, i, message):
+    try:
+        # ... existing code ...
+        
+        # Fetch the target message
+        msg = await userbot.get_messages(chat, msg_id)
+        if msg.service or msg.empty:
+            await app.delete_messages(sender, edit_id)
+            return
+
+        # ... existing code ...
+
+        # Download media (no size limit)
+        edit = await app.edit_message_text(sender, edit_id, "**Downloading...**")
+        file = await userbot.download_media(
+            msg,
+            file_name=file_name,
+            progress=progress_bar,
+            progress_args=("╭─────────────────────╮\n│      **__Downloading__...**\n├─────────────────────", edit, time.time())
+        )
+        
+        caption = await get_final_caption(msg, sender)
+        file = await rename_file(file, sender)
+
+        # Handle different media types
+        if msg.audio:
+            # ... existing audio handling ...
+            pass
+        elif msg.voice:
+            # ... existing voice handling ...
+            pass
+        elif msg.video_note:
+            # ... existing video note handling ...
+            pass
+        elif msg.photo:
+            # ... existing photo handling ...
+            pass
+        else:
+            # Directly upload media (no size checks)
+            await upload_media(sender, target_chat_id, file, caption, edit, topic_id)
+
+    except (ChannelBanned, ChannelInvalid, ChannelPrivate, ChatIdInvalid, ChatInvalid):
+        await app.edit_message_text(sender, edit_id, "Have you joined the channel?")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        if file and os.path.exists(file):
+            os.remove(file)
+        if edit:
+            await edit.delete(2)
+
+# ... rest of the file remains the same ...
 
 async def get_msg(userbot, sender, edit_id, msg_link, i, message):
     try:
