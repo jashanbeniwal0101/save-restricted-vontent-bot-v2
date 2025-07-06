@@ -1,6 +1,7 @@
 # ---------------------------------------------------
 # File Name: __main__.py
-# Description: Main entry point for the Telegram bot
+# Description: A Pyrogram bot for downloading files from Telegram channels or groups 
+#              and uploading them back to Telegram.
 # Author: Gagan
 # GitHub: https://github.com/devgaganin/
 # Telegram: https://t.me/team_spy_pro
@@ -15,35 +16,25 @@ import asyncio
 import importlib
 import gc
 from pyrogram import idle
-from aiojobs import create_scheduler
-
 from devgagan.modules import ALL_MODULES
 from devgagan.core.mongo.plans_db import check_and_remove_expired_users
+from aiojobs import create_scheduler
 
-# 🔁 Auto import module loader
-async def load_all_modules():
-    for all_module in ALL_MODULES:
-        importlib.import_module("devgagan.modules." + all_module)
+# ----------------------------Bot-Start---------------------------- #
 
-# 🔁 Background job for expired premium removals
+loop = asyncio.get_event_loop()
+
+# Function to schedule expiry checks
 async def schedule_expiry_check():
     scheduler = await create_scheduler()
     while True:
         await scheduler.spawn(check_and_remove_expired_users())
-        await asyncio.sleep(3600)  # Run every hour
+        await asyncio.sleep(60)  # Check every hour
         gc.collect()
 
-# 🔁 Full Bot Boot (including session clients and idle mode)
 async def devggn_boot():
-    # FIXED: Import from devgagan package instead of __init__
-    from devgagan import start_all_clients
-
-    # Start all bot & user clients
-    await start_all_clients()
-
-    # Load all features/modules
-    await load_all_modules()
-
+    for all_module in ALL_MODULES:
+        importlib.import_module("devgagan.modules." + all_module)
     print("""
 ---------------------------------------------------
 📂 Bot Deployed successfully ...
@@ -61,11 +52,12 @@ async def devggn_boot():
 """)
 
     asyncio.create_task(schedule_expiry_check())
-    print("🛡️ Auto premium expiry cleanup started...")
+    print("Auto removal started ...")
     await idle()
-    print("⛔ Bot stopped.")
+    print("Bot stopped...")
 
-# Start the main loop using modern asyncio API
+
 if __name__ == "__main__":
-    # FIXED: Use modern asyncio.run() instead of deprecated loop methods
-    asyncio.run(devggn_boot())
+    loop.run_until_complete(devggn_boot())
+
+# ------------------------------------------------------------------ #
