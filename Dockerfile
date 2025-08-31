@@ -1,14 +1,37 @@
-FROM python:3.10.4-slim-buster
-RUN apt update && apt upgrade -y
-RUN apt-get install git curl python3-pip ffmpeg -y
-RUN apt-get -y install git
-RUN apt-get install -y wget python3-pip curl bash neofetch ffmpeg software-properties-common
-COPY requirements.txt .
+# Use a modern, maintained Python base image
+FROM python:3.10.4-slim-bullseye
 
-RUN pip3 install wheel
-RUN pip3 install --no-cache-dir -U -r requirements.txt
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update system and install dependencies
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+        git \
+        curl \
+        wget \
+        ffmpeg \
+        build-essential \
+        libffi-dev \
+        libssl-dev \
+        python3-dev \
+        ca-certificates && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
 WORKDIR /app
-COPY . .
-EXPOSE 8000
 
-CMD flask run -h 0.0.0.0 -p 8000 & python3 -m devgagan
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip wheel
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the bot code
+COPY . .
+
+# Expose port if needed (optional)
+# EXPOSE 8080
+
+# Default command to run your bot
+CMD ["python", "main.py"]
