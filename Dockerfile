@@ -1,37 +1,14 @@
-# Use maintained Python base (Bookworm instead of Buster)
-FROM python:3.10-slim-bookworm
-
-# Prevent apt warnings about tzdata
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install dependencies
-RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends \
-        git \
-        curl \
-        wget \
-        python3-pip \
-        bash \
-        neofetch \
-        ffmpeg \
-        software-properties-common && \
-    rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first (better caching)
+# Use FROM python:3.10.4-slim
+RUN apt update && apt upgrade -y
+RUN apt-get install git curl python3-pip ffmpeg -y
+RUN apt-get -y install git
+RUN apt-get install -y wget python3-pip curl bash neofetch ffmpeg software-properties-common
 COPY requirements.txt .
 
-# Upgrade pip + install Python deps
-RUN pip install --upgrade pip wheel && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Set working directory
+RUN pip3 install wheel
+RUN pip3 install --no-cache-dir -U -r requirements.txt
 WORKDIR /app
-
-# Copy source code
 COPY . .
-
-# Expose app port
 EXPOSE 8000
 
-# Run flask + your custom Python module
-CMD flask run -h 0.0.0.0 -p 8000 & python3 -m devgagan
+CMD flask run -h 0.0.0.0 -p 8000 & python3 -m devgagan Python base (Bookworm instead of Buster
