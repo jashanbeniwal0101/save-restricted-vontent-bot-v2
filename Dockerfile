@@ -1,10 +1,13 @@
-# Use a modern, maintained Python base image
+# Use a maintained Python image
 FROM python:3.10.4-slim-bullseye
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update system and install dependencies
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
@@ -12,6 +15,9 @@ RUN apt-get update && \
         curl \
         wget \
         ffmpeg \
+        bash \
+        neofetch \
+        software-properties-common \
         build-essential \
         libffi-dev \
         libssl-dev \
@@ -19,19 +25,18 @@ RUN apt-get update && \
         ca-certificates && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
-
-# Copy requirements and install Python dependencies
+# Copy Python dependencies
 COPY requirements.txt .
+
+# Upgrade pip and install dependencies
 RUN pip install --upgrade pip wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the bot code
+# Copy project files
 COPY . .
 
-# Expose port if needed (optional)
-# EXPOSE 8080
+# Expose port for Flask
+EXPOSE 8000
 
-# Default command to run your bot
-CMD ["python", "bot.py"]
+# Run Flask and your bot
+CMD ["bash", "-c", "flask run --host=0.0.0.0 --port=8000 & python3 -m devgagan"]
