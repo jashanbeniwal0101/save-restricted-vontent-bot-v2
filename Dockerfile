@@ -1,14 +1,24 @@
-# Use FROM python:3.10.4-slim
-RUN apt update && apt upgrade -y
-RUN apt-get install git curl python3-pip ffmpeg -y
-RUN apt-get -y install git
-RUN apt-get install -y wget python3-pip curl bash neofetch ffmpeg software-properties-common
-COPY requirements.txt .
+# Use Python 3.10 on Debian Bookworm
+FROM python:3.10.4-bookworm
 
-RUN pip3 install wheel
-RUN pip3 install --no-cache-dir -U -r requirements.txt
+# Set working directory
 WORKDIR /app
+
+# Update and install dependencies
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y git curl wget bash neofetch ffmpeg software-properties-common python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python packages
+COPY requirements.txt .
+RUN pip install --upgrade pip wheel
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all project files
 COPY . .
+
+# Expose port for Flask
 EXPOSE 8000
 
-CMD flask run -h 0.0.0.0 -p 8000 & python3 -m devgagan Python base (Bookworm instead of Buster
+# Run both Flask and your bot
+CMD bash -c "flask run -h 0.0.0.0 -p 8000 & python3 -m devgagan"
